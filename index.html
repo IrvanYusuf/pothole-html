@@ -44,8 +44,8 @@
     </div>
     <div id="fps">FPS: 0</div>
     <div id="container">
-      <video id="localVideo" width="640" autoplay muted playsinline></video>
-      <canvas id="overlay" width="640" height="480"></canvas>
+      <video id="localVideo" autoplay muted playsinline></video>
+      <canvas id="overlay"></canvas>
     </div>
 
     <script>
@@ -55,18 +55,20 @@
 
       let dc = pc.createDataChannel("detections");
       dc.onopen = () => console.log("DataChannel open");
-      dc.onmessage = (evt) => handleDetections(evt.data);
+      dc.onmessage = (evt) => {
+        console.log("Detections received:", evt.data);
+        handleDetections(evt.data);
+      };
 
-      // show local video
       const localVideo = document.getElementById("localVideo");
       const overlay = document.getElementById("overlay");
       const ctx = overlay.getContext("2d");
-
       const fpsEl = document.getElementById("fps");
 
       let lastFrameTime = 0;
       let frameCount = 0;
       let fps = 0;
+      let lastDraw = 0; // inisialisasi throttling render
 
       navigator.mediaDevices
         .getUserMedia({
@@ -75,26 +77,37 @@
         })
         .then((stream) => {
           localVideo.srcObject = stream;
-          // add track to PeerConnection
+
+          // set canvas ukuran sesuai video
+          localVideo.onloadedmetadata = () => {
+            overlay.width = localVideo.videoWidth;
+            overlay.height = localVideo.videoHeight;
+          };
+
+          // tambahkan track ke PeerConnection
           stream.getTracks().forEach((t) => pc.addTrack(t, stream));
           startNegotiation();
-        });
+        })
+        .catch((err) => console.error("getUserMedia error:", err));
 
-      // draw boxes received
       function handleDetections(message) {
-        if (performance.now() - lastDraw < 100) return; // 10 FPS render
+        // throttling render 10 FPS
+        if (performance.now() - lastDraw < 100) return;
         lastDraw = performance.now();
+
         let data;
         try {
           data = JSON.parse(message);
         } catch (e) {
           return;
         }
-        // clear then draw
+
         ctx.clearRect(0, 0, overlay.width, overlay.height);
         if (!data.detections) return;
+
         ctx.lineWidth = 4;
         ctx.font = "18px Arial";
+
         data.detections.forEach((det) => {
           const videoWidth = localVideo.videoWidth;
           const videoHeight = localVideo.videoHeight;
@@ -104,10 +117,11 @@
           const w = det.w * videoWidth;
           const h = det.h * videoHeight;
 
-          // blue bg + white text
+          // blue bounding box
           ctx.strokeStyle = "blue";
           ctx.strokeRect(x, y, w, h);
 
+          // label background
           const labelText = det.label + " " + det.confidence;
           const textWidth = ctx.measureText(labelText).width;
           const textHeight = 20;
@@ -123,7 +137,7 @@
       async function startNegotiation() {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        // send offer to server (FastAPI /offer)
+
         const resp = await fetch("https://08227fa66d06.ngrok-free.app/offer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -132,6 +146,7 @@
             type: pc.localDescription.type,
           }),
         });
+
         const answer = await resp.json();
         await pc.setRemoteDescription(answer);
         console.log("Connection established");
@@ -153,7 +168,6 @@
         requestAnimationFrame(trackFPS);
       }
 
-      // mulai menghitung fps
       requestAnimationFrame(trackFPS);
     </script>
   </body>
