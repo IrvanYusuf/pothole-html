@@ -527,7 +527,9 @@
 
       function connectWebSocket() {
         // Ganti dengan URL server Anda
-        ws = new WebSocket("ws://localhost:8000/ws");
+        //ws://localhost:8000/
+        const URL = "49fc30220720.ngrok-free.app";
+        ws = new WebSocket(`ws://${URL}/ws`);
 
         ws.onopen = () => {
           console.log("WebSocket connected");
