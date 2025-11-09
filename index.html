@@ -29,9 +29,25 @@
         gap: 10px;
         margin-bottom: 10px;
       }
+
       #fps {
         text-align: center;
         font-weight: bold;
+      }
+
+      #detectionList {
+        width: 640px;
+        margin: 10px auto;
+        border: 1px solid #333;
+        padding: 10px;
+        background: #f7f7f7;
+        font-family: Arial, sans-serif;
+        max-height: 200px;
+        overflow-y: auto;
+      }
+
+      #detectionList h4 {
+        margin: 0 0 5px 0;
       }
     </style>
   </head>
@@ -48,6 +64,12 @@
       <canvas id="overlay"></canvas>
     </div>
 
+    <!-- div untuk menampilkan deteksi -->
+    <div id="detectionList">
+      <h4>Detections:</h4>
+      <ul id="detectionsUl"></ul>
+    </div>
+
     <script>
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
@@ -56,7 +78,6 @@
       let dc = pc.createDataChannel("detections");
       dc.onopen = () => console.log("DataChannel open");
       dc.onmessage = (evt) => {
-        console.log("Detections received:", evt.data);
         handleDetections(evt.data);
       };
 
@@ -64,11 +85,12 @@
       const overlay = document.getElementById("overlay");
       const ctx = overlay.getContext("2d");
       const fpsEl = document.getElementById("fps");
+      const detectionsUl = document.getElementById("detectionsUl");
 
       let lastFrameTime = 0;
       let frameCount = 0;
       let fps = 0;
-      let lastDraw = 0; // inisialisasi throttling render
+      let lastDraw = 0; // throttling render
 
       navigator.mediaDevices
         .getUserMedia({
@@ -77,21 +99,16 @@
         })
         .then((stream) => {
           localVideo.srcObject = stream;
-
-          // set canvas ukuran sesuai video
           localVideo.onloadedmetadata = () => {
             overlay.width = localVideo.videoWidth;
             overlay.height = localVideo.videoHeight;
           };
-
-          // tambahkan track ke PeerConnection
           stream.getTracks().forEach((t) => pc.addTrack(t, stream));
           startNegotiation();
         })
         .catch((err) => console.error("getUserMedia error:", err));
 
       function handleDetections(message) {
-        // throttling render 10 FPS
         if (performance.now() - lastDraw < 100) return;
         lastDraw = performance.now();
 
@@ -103,6 +120,8 @@
         }
 
         ctx.clearRect(0, 0, overlay.width, overlay.height);
+        detectionsUl.innerHTML = ""; // kosongkan list sebelumnya
+
         if (!data.detections) return;
 
         ctx.lineWidth = 4;
@@ -117,11 +136,10 @@
           const w = det.w * videoWidth;
           const h = det.h * videoHeight;
 
-          // blue bounding box
+          // gambar bounding box
           ctx.strokeStyle = "blue";
           ctx.strokeRect(x, y, w, h);
 
-          // label background
           const labelText = det.label + " " + det.confidence;
           const textWidth = ctx.measureText(labelText).width;
           const textHeight = 20;
@@ -131,6 +149,13 @@
 
           ctx.fillStyle = "white";
           ctx.fillText(labelText, x + 5, y - 4);
+
+          // tampilkan di div
+          const li = document.createElement("li");
+          li.textContent = `${det.label} - ${det.confidence} (x:${det.x.toFixed(
+            2
+          )}, y:${det.y.toFixed(2)})`;
+          detectionsUl.appendChild(li);
         });
       }
 
