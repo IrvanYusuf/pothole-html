@@ -59,15 +59,23 @@
       <a href="mobile.html">mobile</a>
     </div>
     <div id="fps">FPS: 0</div>
-    <div id="container">
-      <video id="localVideo" autoplay muted playsinline></video>
-      <canvas id="overlay"></canvas>
-    </div>
-
-    <!-- div untuk menampilkan deteksi -->
-    <div id="detectionList">
-      <h4>Detections:</h4>
-      <ul id="detectionsUl"></ul>
+    <div
+      id="mainContainer"
+      style="
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        align-items: flex-start;
+      "
+    >
+      <div id="container">
+        <video id="localVideo" autoplay muted playsinline></video>
+        <canvas id="overlay"></canvas>
+      </div>
+      <div id="detectionList">
+        <h4>Detections:</h4>
+        <ul id="detectionsUl"></ul>
+      </div>
     </div>
 
     <script>
