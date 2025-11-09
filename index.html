@@ -49,6 +49,22 @@
       #detectionList h4 {
         margin: 0 0 5px 0;
       }
+
+      #errorList {
+        width: 640px;
+        margin: 10px auto;
+        border: 1px solid red;
+        padding: 10px;
+        background: #ffe6e6;
+        font-family: Arial, sans-serif;
+        max-height: 100px;
+        overflow-y: auto;
+      }
+
+      #errorList h4 {
+        margin: 0 0 5px 0;
+        color: red;
+      }
     </style>
   </head>
   <body>
@@ -59,6 +75,7 @@
       <a href="mobile.html">mobile</a>
     </div>
     <div id="fps">FPS: 0</div>
+
     <div
       id="mainContainer"
       style="
@@ -72,10 +89,16 @@
         <video id="localVideo" autoplay muted playsinline></video>
         <canvas id="overlay"></canvas>
       </div>
+
       <div id="detectionList">
         <h4>Detections:</h4>
         <ul id="detectionsUl"></ul>
       </div>
+    </div>
+
+    <div id="errorList">
+      <h4>Errors:</h4>
+      <ul id="errorsUl"></ul>
     </div>
 
     <script>
@@ -83,22 +106,24 @@
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
-      let dc = pc.createDataChannel("detections");
-      dc.onopen = () => console.log("DataChannel open");
-      dc.onmessage = (evt) => {
-        handleDetections(evt.data);
-      };
-
       const localVideo = document.getElementById("localVideo");
       const overlay = document.getElementById("overlay");
       const ctx = overlay.getContext("2d");
       const fpsEl = document.getElementById("fps");
       const detectionsUl = document.getElementById("detectionsUl");
+      const errorsUl = document.getElementById("errorsUl");
 
       let lastFrameTime = 0;
       let frameCount = 0;
       let fps = 0;
       let lastDraw = 0; // throttling render
+
+      function showError(msg) {
+        console.error(msg);
+        const li = document.createElement("li");
+        li.textContent = msg;
+        errorsUl.appendChild(li);
+      }
 
       navigator.mediaDevices
         .getUserMedia({
@@ -112,9 +137,21 @@
             overlay.height = localVideo.videoHeight;
           };
           stream.getTracks().forEach((t) => pc.addTrack(t, stream));
-          startNegotiation();
+          startNegotiation().catch((err) =>
+            showError("Negotiation error: " + err)
+          );
         })
-        .catch((err) => console.error("getUserMedia error:", err));
+        .catch((err) => showError("getUserMedia error: " + err));
+
+      let dc = pc.createDataChannel("detections");
+      dc.onopen = () => console.log("DataChannel open");
+      dc.onmessage = (evt) => {
+        try {
+          handleDetections(evt.data);
+        } catch (err) {
+          showError("Error parsing detection: " + err);
+        }
+      };
 
       function handleDetections(message) {
         if (performance.now() - lastDraw < 100) return;
@@ -124,11 +161,12 @@
         try {
           data = JSON.parse(message);
         } catch (e) {
+          showError("JSON parse error: " + e);
           return;
         }
 
         ctx.clearRect(0, 0, overlay.width, overlay.height);
-        detectionsUl.innerHTML = ""; // kosongkan list sebelumnya
+        detectionsUl.innerHTML = "";
 
         if (!data.detections) return;
 
@@ -144,7 +182,6 @@
           const w = det.w * videoWidth;
           const h = det.h * videoHeight;
 
-          // gambar bounding box
           ctx.strokeStyle = "blue";
           ctx.strokeRect(x, y, w, h);
 
@@ -158,7 +195,6 @@
           ctx.fillStyle = "white";
           ctx.fillText(labelText, x + 5, y - 4);
 
-          // tampilkan di div
           const li = document.createElement("li");
           li.textContent = `${det.label} - ${det.confidence} (x:${det.x.toFixed(
             2
@@ -168,21 +204,28 @@
       }
 
       async function startNegotiation() {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
 
-        const resp = await fetch("https://08227fa66d06.ngrok-free.app/offer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sdp: pc.localDescription.sdp,
-            type: pc.localDescription.type,
-          }),
-        });
+          const resp = await fetch(
+            "https://08227fa66d06.ngrok-free.app/offer",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sdp: pc.localDescription.sdp,
+                type: pc.localDescription.type,
+              }),
+            }
+          );
 
-        const answer = await resp.json();
-        await pc.setRemoteDescription(answer);
-        console.log("Connection established");
+          const answer = await resp.json();
+          await pc.setRemoteDescription(answer);
+          console.log("Connection established");
+        } catch (err) {
+          showError("startNegotiation error: " + err);
+        }
       }
 
       pc.oniceconnectionstatechange = () => {
