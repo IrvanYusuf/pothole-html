@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Mobile YOLO Detection</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: #f5f5f5;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Permission Modal */
+      .permission-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        z-index: 1000;
+        padding-top: 60px;
+      }
+
+      .permission-modal.hidden {
+        display: none;
+      }
+
+      .modal-content {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        width: 90%;
+        max-width: 320px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      }
+
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
+      .modal-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #333;
+      }
+
+      .close-btn {
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #999;
+        cursor: pointer;
+        padding: 0;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .location-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 14px;
+        color: #666;
+      }
+
+      .permission-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .permission-btn {
+        padding: 14px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .permission-btn.primary {
+        background: #007aff;
+        color: white;
+      }
+
+      .permission-btn.primary:active {
+        background: #0051d5;
+      }
+
+      .permission-btn.secondary {
+        background: #e9ecef;
+        color: #333;
+      }
+
+      .permission-btn.secondary:active {
+        background: #dee2e6;
+      }
+
+      .permission-btn.tertiary {
+        background: transparent;
+        color: #007aff;
+      }
+
+      /* Header */
+      .header {
+        background: white;
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        z-index: 10;
+      }
+
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 16px;
+      }
+
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        color: #666;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #ccc;
+      }
+
+      .status-dot.connected {
+        background: #34c759;
+      }
+
+      .fps-counter {
+        font-size: 14px;
+        font-weight: 600;
+        color: #007aff;
+      }
+
+      /* Video Container */
+      .video-container {
+        flex: 1;
+        position: relative;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      video,
+      canvas {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+
+      canvas {
+        pointer-events: none;
+      }
+
+      .camera-placeholder {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        color: #999;
+      }
+
+      .camera-icon {
+        width: 80px;
+        height: 80px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .camera-icon svg {
+        width: 40px;
+        height: 40px;
+        fill: #666;
+      }
+
+      /* Control Button */
+      .control-container {
+        padding: 30px 20px;
+        background: white;
+        display: flex;
+        justify-content: center;
+      }
+
+      .start-button {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        border: none;
+        background: linear-gradient(135deg, #34c759 0%, #30d158 100%);
+        box-shadow: 0 4px 20px rgba(52, 199, 89, 0.4);
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+
+      .start-button::before {
+        content: "";
+        position: absolute;
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        background: rgba(52, 199, 89, 0.2);
+        animation: pulse 2s infinite;
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 0.5;
+        }
+      }
+
+      .start-button:active {
+        transform: scale(0.95);
+      }
+
+      .start-button.active {
+        background: linear-gradient(135deg, #ff3b30 0%, #ff453a 100%);
+        box-shadow: 0 4px 20px rgba(255, 59, 48, 0.4);
+      }
+
+      .start-button.active::before {
+        background: rgba(255, 59, 48, 0.2);
+      }
+
+      .power-icon {
+        width: 36px;
+        height: 36px;
+        stroke: white;
+        stroke-width: 3;
+        fill: none;
+        z-index: 1;
+      }
+
+      /* Detection Info Overlay */
+      .detection-info {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        right: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        pointer-events: none;
+        z-index: 5;
+      }
+
+      .detection-badge {
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        color: white;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #34c759;
+      }
+
+      /* Loading Spinner */
+      .loading {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 100;
+      }
+
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .loading.show {
+        display: block;
+      }
+
+      .link-container {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="link-container">
+      <a href="index.html">webRTC</a>
+      <a href="websocket.html">webSocket</a>
+      <a href="mobile.html">mobile</a>
+    </div>
+    <!-- Permission Modal -->
+    <div class="permission-modal" id="permissionModal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <span class="modal-title">http://domain.com wants to</span>
+          <button class="close-btn" onclick="closeModal()">×</button>
+        </div>
+
+        <div class="location-info">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M8 0C5.243 0 3 2.243 3 5c0 3.854 5 11 5 11s5-7.146 5-11c0-2.757-2.243-5-5-5zm0 7.5c-1.381 0-2.5-1.119-2.5-2.5S6.619 2.5 8 2.5s2.5 1.119 2.5 2.5S9.381 7.5 8 7.5z"
+            />
+          </svg>
+          <span>Know your location</span>
+        </div>
+
+        <div class="permission-buttons">
+          <button class="permission-btn primary" onclick="allowCamera()">
+            Allow while visiting the site
+          </button>
+          <button class="permission-btn secondary" onclick="allowCamera()">
+            Allow this time
+          </button>
+          <button class="permission-btn tertiary" onclick="closeModal()">
+            Never allow
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="avatar">U</div>
+        <div class="connection-status">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Disconnected</span>
+        </div>
+      </div>
+      <div class="fps-counter" id="fpsCounter">0 FPS</div>
+    </div>
+
+    <!-- Video Container -->
+    <div class="video-container">
+      <div class="camera-placeholder" id="placeholder">
+        <div class="camera-icon">
+          <svg viewBox="0 0 24 24">
+            <path
+              d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"
+            />
+          </svg>
+        </div>
+        <span>Camera not active</span>
+      </div>
+
+      <video
+        id="video"
+        autoplay
+        muted
+        playsinline
+        style="display: none"
+      ></video>
+      <canvas id="overlay"></canvas>
+
+      <div class="detection-info" id="detectionInfo"></div>
+
+      <div class="loading" id="loading">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <!-- Control Button -->
+    <div class="control-container">
+      <button class="start-button" id="startButton" onclick="toggleCamera()">
+        <svg class="power-icon" viewBox="0 0 24 24">
+          <path
+            d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"
+          />
+        </svg>
+      </button>
+    </div>
+
+    <script>
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("overlay");
+      const ctx = canvas.getContext("2d");
+      const placeholder = document.getElementById("placeholder");
+      const startButton = document.getElementById("startButton");
+      const statusDot = document.getElementById("statusDot");
+      const statusText = document.getElementById("statusText");
+      const fpsCounter = document.getElementById("fpsCounter");
+      const detectionInfo = document.getElementById("detectionInfo");
+      const loading = document.getElementById("loading");
+      const permissionModal = document.getElementById("permissionModal");
+
+      let isActive = false;
+      let ws = null;
+      let canSend = true;
+      let lastSendTime = 0;
+      const SEND_INTERVAL = 50;
+      let frameCount = 0;
+      let lastFrameTime = 0;
+
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = 320;
+      tempCanvas.height = 320;
+      const tempCtx = tempCanvas.getContext("2d", { alpha: false });
+
+      function closeModal() {
+        permissionModal.classList.add("hidden");
+      }
+
+      async function allowCamera() {
+        closeModal();
+        loading.classList.add("show");
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: "environment",
+              width: { ideal: 640 },
+              height: { ideal: 480 },
+              frameRate: { ideal: 20 },
+            },
+          });
+
+          video.srcObject = stream;
+          video.style.display = "block";
+          placeholder.style.display = "none";
+
+          video.onloadedmetadata = () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            loading.classList.remove("show");
+          };
+
+          connectWebSocket();
+          requestAnimationFrame(sendFrame);
+        } catch (error) {
+          console.error("Camera error:", error);
+          alert("Failed to access camera. Please allow camera permission.");
+          loading.classList.remove("show");
+        }
+      }
+
+      function connectWebSocket() {
+        // Ganti dengan URL server Anda
+        ws = new WebSocket("ws://localhost:8000/ws");
+
+        ws.onopen = () => {
+          console.log("WebSocket connected");
+          statusDot.classList.add("connected");
+          statusText.textContent = "Connected";
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket disconnected");
+          statusDot.classList.remove("connected");
+          statusText.textContent = "Disconnected";
+        };
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          const boxes = data.detections ?? [];
+          console.log(boxes);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // Update detection badges
+          updateDetectionBadges(boxes);
+
+          // Draw boxes
+          ctx.lineWidth = 4;
+          ctx.font = "16px -apple-system, sans-serif";
+
+          boxes.forEach((det) => {
+            const x = det.x * canvas.width;
+            const y = det.y * canvas.height;
+            const w = det.w * canvas.width;
+            const h = det.h * canvas.height;
+
+            // Draw box
+            let stroke = "blue";
+            if (det.label === "bottle") {
+              stroke = "orange";
+            }
+            ctx.strokeStyle = stroke;
+            ctx.strokeRect(x, y, w, h);
+
+            // Draw label background
+            const label = `${det.label} ${det.confidence}`;
+            const textWidth = ctx.measureText(label).width;
+            ctx.fillStyle = stroke;
+            ctx.fillRect(x, y - 28, textWidth + 16, 28);
+
+            // Draw label text
+            ctx.fillStyle = "white";
+            ctx.fillText(label, x + 8, y - 8);
+          });
+
+          // Calculate FPS
+          frameCount++;
+          const now = performance.now();
+          if (now - lastFrameTime >= 1000) {
+            const fps = Math.round((frameCount * 1000) / (now - lastFrameTime));
+            fpsCounter.textContent = `${fps} FPS`;
+            frameCount = 0;
+            lastFrameTime = now;
+          }
+
+          canSend = true;
+        };
+      }
+
+      function updateDetectionBadges(boxes) {
+        const objectCounts = {};
+        boxes.forEach((det) => {
+          objectCounts[det.label] = (objectCounts[det.label] || 0) + 1;
+        });
+
+        detectionInfo.innerHTML = "";
+        Object.entries(objectCounts).forEach(([label, count]) => {
+          const badge = document.createElement("div");
+          badge.className = "detection-badge";
+          badge.innerHTML = `
+                    <span class="badge-dot"></span>
+                    <span>${count}x ${label}</span>
+                `;
+          detectionInfo.appendChild(badge);
+        });
+      }
+
+      function sendFrame() {
+        if (!isActive || !ws || ws.readyState !== WebSocket.OPEN) {
+          if (isActive) requestAnimationFrame(sendFrame);
+          return;
+        }
+
+        const now = performance.now();
+
+        if (
+          canSend &&
+          video.readyState >= 2 &&
+          now - lastSendTime >= SEND_INTERVAL
+        ) {
+          canSend = false;
+          lastSendTime = now;
+
+          tempCtx.drawImage(video, 0, 0, 320, 320);
+
+          tempCanvas.toBlob(
+            (blob) => {
+              if (blob && ws.readyState === WebSocket.OPEN) {
+                ws.send(blob);
+              } else {
+                canSend = true;
+              }
+            },
+            "image/jpeg",
+            0.5
+          );
+        }
+
+        requestAnimationFrame(sendFrame);
+      }
+
+      function toggleCamera() {
+        if (!isActive) {
+          // Start
+          permissionModal.classList.remove("hidden");
+          isActive = true;
+          startButton.classList.add("active");
+        } else {
+          // Stop
+          isActive = false;
+          startButton.classList.remove("active");
+
+          if (video.srcObject) {
+            video.srcObject.getTracks().forEach((track) => track.stop());
+            video.srcObject = null;
+          }
+
+          if (ws) {
+            ws.close();
+            ws = null;
+          }
+
+          video.style.display = "none";
+          placeholder.style.display = "flex";
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          detectionInfo.innerHTML = "";
+          fpsCounter.textContent = "0 FPS";
+          statusDot.classList.remove("connected");
+          statusText.textContent = "Disconnected";
+        }
+      }
+
+      // Handle page visibility
+      document.addEventListener("visibilitychange", () => {
+        if (document.hidden && isActive) {
+          // Pause when app goes to background
+          canSend = false;
+        } else if (!document.hidden && isActive) {
+          // Resume when app comes to foreground
+          canSend = true;
+        }
+      });
+    </script>
+  </body>
+</html>

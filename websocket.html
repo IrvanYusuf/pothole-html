@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>WebSocket YOLO Client (Optimized)</title>
+    <style>
+      #container {
+        position: relative;
+        width: 640px;
+        margin: auto;
+      }
+      video,
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+      }
+      canvas {
+        pointer-events: none;
+      }
+      .text {
+        text-align: center;
+      }
+      .link-container {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+      #fps {
+        text-align: center;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <h3 class="text">WebSocket + YOLO (Optimized)</h3>
+    <div class="link-container">
+      <a href="index.html">webRTC</a>
+      <a href="websocket.html">webSocket</a>
+      <a href="mobile.html">mobile</a>
+    </div>
+    <div id="fps">FPS: 0</div>
+    <div id="container">
+      <video id="video" width="640" autoplay muted playsinline></video>
+      <canvas id="overlay" width="640" height="480"></canvas>
+    </div>
+
+    <script>
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("overlay");
+      const ctx = canvas.getContext("2d");
+      const fpsEl = document.getElementById("fps");
+
+      let lastFrameTime = 0;
+      let frameCount = 0;
+      let fps = 0;
+      let canSend = true;
+      let lastSendTime = 0;
+      const SEND_INTERVAL = 33; // ~30fps max (33ms)
+
+      const ws = new WebSocket("ws://localhost:8000/ws");
+
+      ws.onopen = () => {
+        console.log("Connected to server");
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const boxes = data.detections ?? data;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 4;
+        ctx.font = "18px Arial";
+        data.detections.forEach((det) => {
+          const x = det.x * overlay.width;
+          const y = det.y * overlay.height;
+          const w = det.w * overlay.width;
+          const h = det.h * overlay.height;
+
+          // blue bg + white text
+          let stroke = "blue";
+          if (det.label === "bottle") {
+            stroke = "orange";
+          }
+          ctx.strokeStyle = stroke;
+          ctx.strokeRect(x, y, w, h);
+
+          const labelText = det.label + " " + det.confidence;
+          const textWidth = ctx.measureText(labelText).width;
+          const textHeight = 20;
+
+          ctx.fillStyle = stroke;
+          ctx.fillRect(x, y - textHeight, textWidth + 10, textHeight + 6);
+
+          ctx.fillStyle = "white";
+          ctx.fillText(labelText, x + 5, y - 4);
+        });
+
+        frameCount++;
+        const now = performance.now();
+        if (now - lastFrameTime >= 1000) {
+          fps = Math.round((frameCount * 1000) / (now - lastFrameTime));
+          fpsEl.textContent = `FPS: ${fps}`;
+          frameCount = 0;
+          lastFrameTime = now;
+        }
+
+        canSend = true;
+      };
+
+      const tempCanvas = document.createElement("canvas");
+      tempCanvas.width = 320;
+      tempCanvas.height = 240;
+      const tempCtx = tempCanvas.getContext("2d", { alpha: false });
+
+      async function startCamera() {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 },
+          },
+        });
+        video.srcObject = stream;
+        video.play();
+        requestAnimationFrame(sendFrame);
+      }
+
+      function sendFrame() {
+        const now = performance.now();
+
+        // Throttle: Kirim maksimal setiap 33ms (30fps)
+        if (
+          ws.readyState === WebSocket.OPEN &&
+          canSend &&
+          video.readyState >= 2 &&
+          now - lastSendTime >= SEND_INTERVAL
+        ) {
+          canSend = false;
+          lastSendTime = now;
+
+          tempCtx.drawImage(video, 0, 0, 320, 240);
+
+          tempCanvas.toBlob(
+            (blob) => {
+              if (blob && ws.readyState === WebSocket.OPEN) {
+                ws.send(blob);
+              } else {
+                canSend = true;
+              }
+            },
+            "image/jpeg",
+            0.9 // Turunkan quality lagi
+          );
+        }
+
+        requestAnimationFrame(sendFrame);
+      }
+
+      startCamera();
+    </script>
+  </body>
+</html>
