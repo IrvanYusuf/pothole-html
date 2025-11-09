@@ -119,7 +119,7 @@
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         // send offer to server (FastAPI /offer)
-        const resp = await fetch("http://49fc30220720.ngrok-free.app/offer", {
+        const resp = await fetch("https://08227fa66d06.ngrok-free.app/offer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
